@@ -41,7 +41,3 @@ env/
 .DS_Store
 Thumbs.db
 
-# Project specific
-pdfs/
-embeddings/
-data/
