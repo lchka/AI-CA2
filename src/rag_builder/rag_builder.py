@@ -10,12 +10,13 @@ load_dotenv()
 # -------------------------
 # CONFIG
 # -------------------------
-PDF_FOLDER = "pdfs"
-CHUNK_SIZE = 800           # approx tokens
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PDF_FOLDER = os.path.join(BASE_DIR, "..", "pdfs")
+
+CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
 
@@ -44,8 +45,7 @@ def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
     while start < len(tokens):
         end = start + chunk_size
         chunk_tokens = tokens[start:end]
-        chunk_text = enc.decode(chunk_tokens)
-        chunks.append(chunk_text)
+        chunks.append(enc.decode(chunk_tokens))
         start += chunk_size - overlap
 
     return chunks
@@ -66,8 +66,7 @@ def embed_text(text):
 # MAIN PIPELINE
 # -------------------------
 def process_pdfs():
-    all_vectors = []
-    counter = 0
+    batch = []
 
     for pdf_name in os.listdir(PDF_FOLDER):
         if not pdf_name.lower().endswith(".pdf"):
@@ -79,35 +78,31 @@ def process_pdfs():
         text = extract_pdf_text(pdf_path)
         chunks = chunk_text(text)
 
-        print(f"➡️  {len(chunks)} chunks created")
-
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             emb = embed_text(chunk)
 
             vector = {
-                "id": f"doc-{counter}",
+                "id": f"{pdf_name.replace('.pdf','')}_chunk_{i}",
                 "values": emb,
                 "metadata": {
-                    "source": pdf_name,
+                    "title": pdf_name.replace(".pdf", ""),
+                    "source": "PDF literature",
+                    "chunk_index": i,
+                    "content_type": "ingredient safety research",
                     "text": chunk
                 }
             }
 
-            all_vectors.append(vector)
-            counter += 1
+            batch.append(vector)
 
-        # Upsert in batches of 100
-        if len(all_vectors) > 100:
-            print("⬆️  Uploading batch...")
-            index.upsert(all_vectors)
-            all_vectors = []
+            if len(batch) >= 100:
+                index.upsert(batch)
+                batch = []
 
-    # Upload remaining vectors
-    if len(all_vectors) > 0:
-        print("⬆️  Uploading final batch...")
-        index.upsert(all_vectors)
+    if batch:
+        index.upsert(batch)
 
-    print("🎉 DONE – All PDFs added to Pinecone!")
+    print("🎉 DONE – PDFs indexed with rich metadata!")
 
 
 if __name__ == "__main__":

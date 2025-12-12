@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "pinecone": "^0.1.0"
+  }
+}
