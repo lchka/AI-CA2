@@ -33,6 +33,24 @@ def extract_pdf_text(path):
 
 
 # -------------------------
+# PDF METADATA EXTRACTION (NEW)
+# -------------------------
+def extract_pdf_metadata(path, fallback_name):
+    doc = fitz.open(path)
+    meta = doc.metadata or {}
+
+    title = meta.get("title") or fallback_name
+    authors = meta.get("author") or "Unknown author(s)"
+
+    creation_date = meta.get("creationDate")
+    year = "n.d."
+    if creation_date and len(creation_date) >= 6:
+        year = creation_date[2:6]  # e.g. D:20191203 → 2019
+
+    return title, authors, year
+
+
+# -------------------------
 # TOKEN-AWARE CHUNKING
 # -------------------------
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
@@ -75,6 +93,10 @@ def process_pdfs():
         pdf_path = os.path.join(PDF_FOLDER, pdf_name)
         print(f"📄 Extracting: {pdf_name}")
 
+        # NEW: extract citation metadata once per PDF
+        fallback_title = pdf_name.replace(".pdf", "").replace("_", " ")
+        title, authors, year = extract_pdf_metadata(pdf_path, fallback_title)
+
         text = extract_pdf_text(pdf_path)
         chunks = chunk_text(text)
 
@@ -82,10 +104,12 @@ def process_pdfs():
             emb = embed_text(chunk)
 
             vector = {
-                "id": f"{pdf_name.replace('.pdf','')}_chunk_{i}",
+                "id": f"{fallback_title}_chunk_{i}",
                 "values": emb,
                 "metadata": {
-                    "title": pdf_name.replace(".pdf", ""),
+                    "title": title,
+                    "authors": authors,
+                    "year": year,
                     "source": "PDF literature",
                     "chunk_index": i,
                     "content_type": "ingredient safety research",
@@ -102,7 +126,7 @@ def process_pdfs():
     if batch:
         index.upsert(batch)
 
-    print("🎉 DONE – PDFs indexed with rich metadata!")
+    print(" DONE – PDFs indexed with citation-ready metadata!")
 
 
 if __name__ == "__main__":
